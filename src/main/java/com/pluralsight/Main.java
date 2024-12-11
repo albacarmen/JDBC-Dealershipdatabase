@@ -1,96 +1,317 @@
-package com.pluralsight.dealership.db;
+package com.yearup.dealership.Main;
 
+import com.pluralsight.dealership.db.InventoryDao;
+import com.pluralsight.dealership.db.LeaseDao;
+import com.pluralsight.dealership.db.SalesDao;
+import com.pluralsight.dealership.db.VehicleDao;
+import com.pluralsight.dealership.models.LeaseContract;
+import com.pluralsight.dealership.models.SalesContract;
 import com.pluralsight.dealership.models.Vehicle;
+import org.apache.commons.dbcp2.BasicDataSource;
 
 import javax.sql.DataSource;
-import java.sql.*;
-import java.util.ArrayList;
+import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Scanner;
+import java.util.UUID;
 
-public class VehicleDao {
-    private DataSource dataSource;
+public class Main {
+    public static void main(String[] args) {
 
-    public VehicleDao(DataSource dataSource) {
-        this.dataSource = dataSource;
-    }
+        String username = args[0];
+        String password = args[1];
 
-    public List<Vehicle> searchByPriceRange(double minPrice, double maxPrice) {
-        List<Vehicle> vehicles = new ArrayList<>();
-        String query = "SELECT * FROM vehicles WHERE price BETWEEN ? AND ?";
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(query)) {
-            statement.setDouble(1, minPrice);
-            statement.setDouble(2, maxPrice);
-            ResultSet resultSet = statement.executeQuery();
-            while (resultSet.next()) {
-                vehicles.add(mapResultSetToVehicle(resultSet));
+
+        BasicDataSource dataSource = new BasicDataSource();
+        dataSource.setUrl("jdbc:mysql://localhost:3306/car_dealership");
+        dataSource.setUsername(username);
+        dataSource.setPassword(password);
+
+
+        VehicleDao vehicleDao = new VehicleDao(dataSource);
+        InventoryDao inventoryDao = new InventoryDao(dataSource);
+        SalesDao salesDao = new SalesDao(dataSource);
+        LeaseDao leaseDao = new LeaseDao(dataSource);
+
+
+        Scanner scanner = new Scanner(System.in);
+        boolean exit = false;
+
+        // Main menu loop
+        while (!exit) {
+            System.out.println("Main Menu:");
+            System.out.println("1. Search vehicles");
+            System.out.println("2. Add a vehicle");
+            System.out.println("3. Add a contract");
+            System.out.println("4. Remove a vehicle");
+            System.out.println("5. Exit");
+            System.out.print("Enter your choice: ");
+            int choice = scanner.nextInt();
+            scanner.nextLine(); 
+
+            switch (choice) {
+                case 1:
+                    searchVehiclesMenu(vehicleDao, scanner);
+                    break;
+                case 2:
+                    addVehicleMenu(vehicleDao, inventoryDao, scanner);
+                    break;
+                case 3:
+                    addContractMenu(salesDao, leaseDao, scanner);
+                    break;
+                case 4:
+                    removeVehicleMenu(vehicleDao, inventoryDao, scanner);
+                    break;
+                case 5:
+                    exit = true;
+                    break;
+                default:
+                    System.out.println("Invalid choice. Please try again.");
+                    break;
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
-        return vehicles;
+
+        scanner.close();
     }
 
-    public List<Vehicle> searchByMakeModel(String make, String model) {
-        List<Vehicle> vehicles = new ArrayList<>();
-        String query = "SELECT * FROM vehicles WHERE make = ? AND model = ?";
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(query)) {
-            statement.setString(1, make);
-            statement.setString(2, model);
-            ResultSet resultSet = statement.executeQuery();
-            while (resultSet.next()) {
-                vehicles.add(mapResultSetToVehicle(resultSet));
+    // Menu for adding contracts
+    private static void addContractMenu(SalesDao salesDao, LeaseDao leaseDao, Scanner scanner) {
+        System.out.print("Enter the VIN of the vehicle: ");
+        String vin = scanner.nextLine();
+
+        System.out.println("\nChoose contract type:");
+        System.out.println("1. Sales Contract");
+        System.out.println("2. Lease Contract");
+        System.out.print("Enter your choice: ");
+        int contractType = scanner.nextInt();
+        scanner.nextLine();
+
+        switch (contractType) {
+            case 1:
+                addSalesContract(salesDao, vin, scanner);
+                break;
+            case 2:
+                addLeaseContract(leaseDao, vin, scanner);
+                break;
+            default:
+                System.out.println("Invalid choice. Contract not added.");
+                break;
+        }
+    }
+
+    // Method for adding a sales contract
+    private static void addSalesContract(SalesDao salesDao, String vin, Scanner scanner) {
+        System.out.print("Enter sale date (YYYY-MM-DD): ");
+        String dateStr = scanner.nextLine();
+        LocalDate saleDate = LocalDate.parse(dateStr);
+
+        System.out.print("Enter the price: ");
+        double price = scanner.nextDouble();
+        scanner.nextLine();
+
+        SalesContract contract = new SalesContract(vin, saleDate, price);
+        salesDao.addSalesContract(contract);
+        System.out.println("Sales contract added successfully.");
+    }
+
+    // Method for adding a lease contract
+    private static void addLeaseContract(LeaseDao leaseDao, String vin, Scanner scanner) {
+        System.out.print("Enter lease start date (YYYY-MM-DD): ");
+        String startDateStr = scanner.nextLine();
+        LocalDate startDate = LocalDate.parse(startDateStr);
+
+        System.out.print("Enter lease end date (YYYY-MM-DD): ");
+        String endDateStr = scanner.nextLine();
+        LocalDate endDate = LocalDate.parse(endDateStr);
+
+        System.out.print("Enter monthly payment: ");
+        double monthlyPayment = scanner.nextDouble();
+        scanner.nextLine();
+
+        LeaseContract contract = new LeaseContract(vin, startDate, endDate, monthlyPayment);
+        leaseDao.addLeaseContract(contract);
+        System.out.println("Lease contract added successfully.");
+    }
+
+    // Menu for searching vehicles
+    private static void searchVehiclesMenu(VehicleDao vehicleDao, Scanner scanner) {
+        boolean back = false;
+        while (!back) {
+            System.out.println("\nSearch Vehicles:");
+            System.out.println("1. By price range");
+            System.out.println("2. By make/model");
+            System.out.println("3. By year range");
+            System.out.println("4. By color");
+            System.out.println("5. By mileage range");
+            System.out.println("6. By type");
+            System.out.println("7. Back to Main Menu");
+            System.out.print("Enter your choice: ");
+            int choice = scanner.nextInt();
+            scanner.nextLine();
+
+            switch (choice) {
+                case 1:
+                    searchByPriceRange(vehicleDao, scanner);
+                    break;
+                case 2:
+                    searchByMakeAndModel(vehicleDao, scanner);
+                    break;
+                case 3:
+                    searchByYearRange(vehicleDao, scanner);
+                    break;
+                case 4:
+                    searchByColor(vehicleDao, scanner);
+                    break;
+                case 5:
+                    searchByMileageRange(vehicleDao, scanner);
+                    break;
+                case 6:
+                    searchByType(vehicleDao, scanner);
+                    break;
+                case 7:
+                    back = true;
+                    break;
+                default:
+                    System.out.println("Invalid choice. Please try again.");
+                    break;
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return vehicles;
-    }
-
-    // Additional search methods (by year range, color, mileage range, type) would follow the same pattern
-
-    public void addVehicle(Vehicle vehicle) {
-        String query = "INSERT INTO vehicles (vin, make, model, year, is_sold, color, type, mileage, price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(query)) {
-            statement.setString(1, vehicle.getVin());
-            statement.setString(2, vehicle.getMake());
-            statement.setString(3, vehicle.getModel());
-            statement.setInt(4, vehicle.getYear());
-            statement.setBoolean(5, vehicle.isSold());
-            statement.setString(6, vehicle.getColor());
-            statement.setString(7, vehicle.getType());
-            statement.setInt(8, vehicle.getMileage());
-            statement.setDouble(9, vehicle.getPrice());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
 
-    public void removeVehicle(String vin) {
-        String query = "DELETE FROM vehicles WHERE vin = ?";
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(query)) {
-            statement.setString(1, vin);
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
+    // Helper methods for vehicle searches
+    private static void searchByPriceRange(VehicleDao vehicleDao, Scanner scanner) {
+        System.out.print("Enter minimum price: ");
+        double minPrice = scanner.nextDouble();
+        scanner.nextLine();
+
+        System.out.print("Enter maximum price: ");
+        double maxPrice = scanner.nextDouble();
+        scanner.nextLine();
+
+        List<Vehicle> vehicles = vehicleDao.searchByPriceRange(minPrice, maxPrice);
+        displaySearchResults(vehicles);
+    }
+
+    private static void searchByMakeAndModel(VehicleDao vehicleDao, Scanner scanner) {
+        System.out.print("Enter make: ");
+        String make = scanner.nextLine();
+
+        System.out.print("Enter model: ");
+        String model = scanner.nextLine();
+
+        List<Vehicle> vehicles = vehicleDao.searchByMakeModel(make, model);
+        displaySearchResults(vehicles);
+    }
+
+    private static void searchByYearRange(VehicleDao vehicleDao, Scanner scanner) {
+        System.out.print("Enter minimum year: ");
+        int minYear = scanner.nextInt();
+        scanner.nextLine();
+
+        System.out.print("Enter maximum year: ");
+        int maxYear = scanner.nextInt();
+        scanner.nextLine();
+
+        List<Vehicle> vehicles = vehicleDao.searchByYearRange(minYear, maxYear);
+        displaySearchResults(vehicles);
+    }
+
+    private static void searchByColor(VehicleDao vehicleDao, Scanner scanner) {
+        System.out.print("Enter color: ");
+        String color = scanner.nextLine();
+
+        List<Vehicle> vehicles = vehicleDao.searchByColor(color);
+        displaySearchResults(vehicles);
+    }
+
+    private static void searchByMileageRange(VehicleDao vehicleDao, Scanner scanner) {
+        System.out.print("Enter minimum mileage: ");
+        int minMileage = scanner.nextInt();
+        scanner.nextLine();
+
+        System.out.print("Enter maximum mileage: ");
+        int maxMileage = scanner.nextInt();
+        scanner.nextLine();
+
+        List<Vehicle> vehicles = vehicleDao.searchByMileageRange(minMileage, maxMileage);
+        displaySearchResults(vehicles);
+    }
+
+    private static void searchByType(VehicleDao vehicleDao, Scanner scanner) {
+        System.out.print("Enter vehicle type: ");
+        String type = scanner.nextLine();
+
+        List<Vehicle> vehicles = vehicleDao.searchByType(type);
+        displaySearchResults(vehicles);
+    }
+
+
+    private static void displaySearchResults(List<Vehicle> vehicles) {
+        if (vehicles.isEmpty()) {
+            System.out.println("No vehicles found.");
+        } else {
+            System.out.println("\nSearch Results:");
+            for (Vehicle vehicle : vehicles) {
+                System.out.println(vehicle);
+            }
         }
     }
 
-    private Vehicle mapResultSetToVehicle(ResultSet resultSet) throws SQLException {
-        return new Vehicle(
-                resultSet.getString("vin"),
-                resultSet.getString("make"),
-                resultSet.getString("model"),
-                resultSet.getInt("year"),
-                resultSet.getBoolean("is_sold"),
-                resultSet.getString("color"),
-                resultSet.getString("type"),
-                resultSet.getInt("mileage"),
-                resultSet.getDouble("price")
-        );
+    // ADD NEW VEHICLE
+    private static void addVehicleMenu(VehicleDao vehicleDao, InventoryDao inventoryDao, Scanner scanner) {
+        String vin = generateRandomVin();
+
+        System.out.print("Enter make: ");
+        String make = scanner.nextLine();
+
+        System.out.print("Enter model: ");
+        String model = scanner.nextLine();
+
+        System.out.print("Enter year: ");
+        int year = scanner.nextInt();
+        scanner.nextLine();
+
+        System.out.print("Enter color: ");
+        String color = scanner.nextLine();
+
+        System.out.print("Enter mileage: ");
+        int mileage = scanner.nextInt();
+        scanner.nextLine();
+
+        System.out.print("Enter price: ");
+        double price = scanner.nextDouble();
+        scanner.nextLine();
+
+        System.out.print("Enter type: ");
+        String type = scanner.nextLine();
+
+        System.out.print("Enter dealership ID: ");
+        int dealershipId = scanner.nextInt();
+        scanner.nextLine();
+
+        Vehicle vehicle = new Vehicle(vin, make, model, year, false, color, type, mileage, price);
+        vehicleDao.addVehicle(vehicle);
+        inventoryDao.addVehicleToInventory(vin, dealershipId);
+
+        System.out.println("Vehicle added successfully.");
+    }
+
+    // Mremoving a vehicle
+    private static void removeVehicleMenu(VehicleDao vehicleDao, InventoryDao inventoryDao, Scanner scanner) {
+        System.out.print("Enter VIN of the vehicle to remove (must not be sold or leased): ");
+        String vin = scanner.nextLine();
+
+        inventoryDao.removeVehicleFromInventory(vin);
+        vehicleDao.removeVehicle(vin);
+        System.out.println("Vehicle removed successfully.");
+    }
+
+    // generating a random VIN
+    public static String generateRandomVin() {
+        UUID uuid = UUID.randomUUID();
+        String vin = uuid.toString().toUpperCase().replaceAll("-", "").substring(0, 17);
+        return vin;
     }
 }
+
